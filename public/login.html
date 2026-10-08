@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>تسجيل الدخول | Tabibi Stock</title>
+  <link rel="icon" href="/assets/images/tabibi-stock.webp" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
+        .then(function (r) { if (r.ok) window.location.replace('/dashboard'); })
+        .catch(function () {});
+    })();
+  </script>
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="brand">
+      <img src="/assets/images/tabibi-stock.webp" alt="Tabibi Stock" class="brand-logo" />
+      <h1>مخزون طبيبي</h1>
+      <p class="subtitle">إدارة مخزون الأدوية</p>
+    </div>
+
+    <form id="loginForm" autocomplete="on">
+      <label>
+        اسم المستخدم
+        <input type="text" id="username" name="username" required autocomplete="username" />
+      </label>
+      <label>
+        كلمة المرور
+        <input type="password" id="password" name="password" required autocomplete="current-password" />
+      </label>
+      <button type="submit" class="btn primary" id="loginBtn">دخول</button>
+      <div id="loginMessage" class="message" role="alert" aria-live="polite"></div>
+    </form>
+  </div>
+
+  <script src="/js/login.js"></script>
+</body>
+</html>
