@@ -38,4 +38,8 @@
       window.location.href = '/dashboard';
     } catch (err) {
       setMessage('تعذر الاتصال بالخادم', 'error');
-      btn
+      btn.disabled = false;
+      btn.textContent = 'دخول';
+    }
+  });
+})();
