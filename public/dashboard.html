@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>لوحة التحكم | مخزون طبيبي</title>
+  <link rel="icon" href="/assets/images/tabibi-stock.webp" />
+  <link rel="stylesheet" href="/public/css/style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
+        .then(function (r) { if (!r.ok) window.location.replace('/login'); })
+        .catch(function () { window.location.replace('/login'); });
+    })();
+  </script>
+</head>
+<body class="dashboard-body">
+  <header class="topbar">
+    <button id="menuToggle" class="icon-btn" aria-label="القائمة">☰</button>
+    <div class="topbar-brand">
+      <img src="/assets/images/tabibi-stock.webp" alt="Tabibi Stock" class="topbar-logo" />
+      <span>مخزون طبيبي</span>
+    </div>
+    <button id="logoutBtn" class="btn ghost">خروج</button>
+  </header>
+
+  <aside id="sidebar" class="sidebar">
+    <nav>
+      <a href="#" data-view="dashboard" class="nav-link active">لوحة التحكم</a>
+      <a href="#" data-view="medicines" class="nav-link">العلاجات</a>
+      <a href="#" data-view="history" class="nav-link">سجل الحركات</a>
+      <a href="#" data-view="settings" class="nav-link">إعدادات</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <section id="view-dashboard" class="view">
+      <h2>ملخص المخزون</h2>
+      <div class="cards">
+        <div class="card stat"><span class="stat-num" id="statTypes">0</span><span class="stat-label">إجمالي أنواع العلاج</span></div>
+        <div class="card stat"><span class="stat-num" id="statStrips">0</span><span class="stat-label">إجمالي الشرايط المتاحة</span></div>
+        <div class="card stat"><span class="stat-num" id="statAvailable">0</span><span class="stat-label">علاجات متوفرة</span></div>
+        <div class="card stat"><span class="stat-num" id="statLow">0</span><span class="stat-label">علاجات قاربت على النفاد</span></div>
+        <div class="card stat"><span class="stat-num" id="statOut">0</span><span class="stat-label">علاجات خلصت</span></div>
+        <div class="card stat"><span class="stat-num" id="statUnregistered">0</span><span class="stat-label">لم يتم تسجيل مخزونها</span></div>
+      </div>
+
+      <div class="actions-bar">
+        <button id="purchaseBtn" class="btn primary">شراء علاج</button>
+        <button id="addMedicineBtn" class="btn">إضافة علاج</button>
+        <button id="initSeedBtn" class="btn ghost">تهيئة القائمة الافتراضية</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table" id="medicinesTable">
+          <thead>
+            <tr>
+              <th>اسم العلاج</th>
+              <th>الشخص</th>
+              <th>عدد الشرايط المتبقية</th>
+              <th>حالة المخزون</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="medicinesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="view-history" class="view hidden">
+      <h2>سجل الحركات</h2>
+      <div class="filters">
+        <select id="filterType">
+          <option value="">كل الأنواع</option>
+          <option value="purchase">شراء</option>
+          <option value="use">استخدام</option>
+          <option value="adjust">تعديل يدوي</option>
+        </select>
+        <button id="refreshHistoryBtn" class="btn">تحديث</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>العلاج</th>
+              <th>الشخص</th>
+              <th>النوع</th>
+              <th>قبل</th>
+              <th>التغيير</th>
+              <th>بعد</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="modalBackdrop" class="modal-backdrop hidden">
+    <div class="modal" id="modalContent"></div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/public/js/dashboard.js"></script>
+</body>
+</html>
