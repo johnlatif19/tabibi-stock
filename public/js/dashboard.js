@@ -1,7 +1,8 @@
 (function () {
   const state = {
     medicines: [],
-    people: []
+    people: [],
+    showArchived: false
   };
 
   const els = {
@@ -12,6 +13,7 @@
     statOut: document.getElementById('statOut'),
     statUnregistered: document.getElementById('statUnregistered'),
     medicinesBody: document.getElementById('medicinesBody'),
+    medicinesBody2: document.getElementById('medicinesBody2'),
     historyBody: document.getElementById('historyBody'),
     modalBackdrop: document.getElementById('modalBackdrop'),
     modalContent: document.getElementById('modalContent'),
@@ -21,9 +23,14 @@
     logoutBtn: document.getElementById('logoutBtn'),
     purchaseBtn: document.getElementById('purchaseBtn'),
     addMedicineBtn: document.getElementById('addMedicineBtn'),
+    addMedicineBtn2: document.getElementById('addMedicineBtn2'),
     initSeedBtn: document.getElementById('initSeedBtn'),
     refreshHistoryBtn: document.getElementById('refreshHistoryBtn'),
-    filterType: document.getElementById('filterType')
+    filterType: document.getElementById('filterType'),
+    searchMedicines: document.getElementById('searchMedicines'),
+    filterPerson: document.getElementById('filterPerson'),
+    filterStatus: document.getElementById('filterStatus'),
+    showArchivedToggle: document.getElementById('showArchivedToggle')
   };
 
   async function api(path, options = {}) {
@@ -89,20 +96,24 @@
 
   async function loadMedicines() {
     try {
-      const data = await api('/api/medicines');
+      const url = '/api/medicines' + (state.showArchived ? '?includeArchived=true' : '');
+      const data = await api(url);
       state.medicines = data.items;
-      renderMedicines();
+      renderMedicinesTable();
+      renderMedicinesPage();
+      populatePeopleFilter();
     } catch (err) {
       toast(err.message, 'error');
     }
   }
 
-  function renderMedicines() {
-    if (!state.medicines.length) {
+  function renderMedicinesTable() {
+    const items = state.medicines.filter((m) => !m.archived);
+    if (!items.length) {
       els.medicinesBody.innerHTML = '<tr><td colspan="5" class="empty">لا توجد علاجات</td></tr>';
       return;
     }
-    els.medicinesBody.innerHTML = state.medicines.map((m) => {
+    els.medicinesBody.innerHTML = items.map((m) => {
       const qty = m.quantity === null ? '—' : m.quantity;
       return `
         <tr>
@@ -124,12 +135,102 @@
     });
   }
 
+  function populatePeopleFilter() {
+    const people = Array.from(new Set(state.medicines.map((m) => m.person))).sort((a, b) => a.localeCompare(b, 'ar'));
+    const current = els.filterPerson.value;
+    els.filterPerson.innerHTML = '<option value="">كل الأشخاص</option>' +
+      people.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+    if (people.includes(current)) els.filterPerson.value = current;
+  }
+
+  function getFilteredMedicines() {
+    const q = (els.searchMedicines.value || '').trim().toLowerCase();
+    const person = els.filterPerson.value;
+    const status = els.filterStatus.value;
+    return state.medicines.filter((m) => {
+      if (!state.showArchived && m.archived) return false;
+      if (person && m.person !== person) return false;
+      if (status && m.status !== status) return false;
+      if (q && !m.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+
+  function renderMedicinesPage() {
+    const items = getFilteredMedicines();
+    if (!items.length) {
+      els.medicinesBody2.innerHTML = '<tr><td colspan="7" class="empty">لا توجد نتائج</td></tr>';
+      return;
+    }
+    els.medicinesBody2.innerHTML = items.map((m) => {
+      const qty = m.quantity === null ? '—' : m.quantity;
+      const archivedTag = m.archived ? ' <span class="badge unregistered">مؤرشف</span>' : '';
+      return `
+        <tr>
+          <td>${escapeHtml(m.name)}${archivedTag}</td>
+          <td>${escapeHtml(m.person)}</td>
+          <td>${qty}</td>
+          <td>${m.stripsPerBox}</td>
+          <td>${m.lowStockThreshold}</td>
+          <td><span class="${statusClass(m.status)}">${escapeHtml(m.statusLabel)}</span></td>
+          <td class="row-actions">
+            <button class="btn small primary" data-action="purchase" data-id="${m.id}">شراء</button>
+            <button class="btn small" data-action="use" data-id="${m.id}">استخدام</button>
+            <button class="btn small ghost" data-action="details" data-id="${m.id}">تفاصيل</button>
+            <button class="btn small ghost" data-action="edit" data-id="${m.id}">تعديل</button>
+            <button class="btn small ghost" data-action="archive" data-id="${m.id}">${m.archived ? 'إلغاء الأرشفة' : 'أرشفة'}</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    els.medicinesBody2.querySelectorAll('button[data-action]').forEach((btn) => {
+      btn.addEventListener('click', () => handlePageAction(btn.dataset.action, btn.dataset.id));
+    });
+  }
+
   async function handleRowAction(action, id) {
     const med = state.medicines.find((m) => m.id === id);
     if (!med) return;
     if (action === 'use') return useStrip(med);
     if (action === 'purchase') return purchaseModal(med);
     if (action === 'details') return detailsModal(med);
+  }
+
+  async function handlePageAction(action, id) {
+    const med = state.medicines.find((m) => m.id === id);
+    if (!med) return;
+    if (action === 'use') return useStrip(med);
+    if (action === 'purchase') return purchaseModal(med);
+    if (action === 'details') return detailsModal(med);
+    if (action === 'edit') return editModal(med);
+    if (action === 'archive') return archiveConfirm(med);
+  }
+
+  function archiveConfirm(med) {
+    const willArchive = !med.archived;
+    openModal(`
+      <h3>${willArchive ? 'أرشفة' : 'إلغاء أرشفة'}: ${escapeHtml(med.name)}</h3>
+      <p>${willArchive ? 'سيتم إخفاء العلاج من القوائم النشطة، ويمكن استرجاعه لاحقًا.' : 'سيتم إرجاع العلاج للقوائم النشطة.'}</p>
+      <div class="modal-actions">
+        <button class="btn" id="cancelBtn">إلغاء</button>
+        <button class="btn primary" id="confirmBtn">تأكيد</button>
+      </div>
+    `);
+    document.getElementById('cancelBtn').onclick = closeModal;
+    document.getElementById('confirmBtn').onclick = async () => {
+      try {
+        await api(`/api/medicines/${med.id}/archive`, {
+          method: 'POST',
+          body: JSON.stringify({ archived: willArchive })
+        });
+        closeModal();
+        toast(willArchive ? 'تمت الأرشفة' : 'تم إلغاء الأرشفة', 'success');
+        await refreshAll();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    };
   }
 
   async function useStrip(med) {
@@ -397,6 +498,7 @@
     purchaseModal(first);
   });
   els.addMedicineBtn.addEventListener('click', addMedicineModal);
+  els.addMedicineBtn2.addEventListener('click', addMedicineModal);
   els.initSeedBtn.addEventListener('click', async () => {
     try {
       await api('/api/init', { method: 'POST' });
@@ -408,6 +510,14 @@
   });
   els.refreshHistoryBtn.addEventListener('click', loadHistory);
   els.filterType.addEventListener('change', loadHistory);
+  els.searchMedicines.addEventListener('input', renderMedicinesPage);
+  els.filterPerson.addEventListener('change', renderMedicinesPage);
+  els.filterStatus.addEventListener('change', renderMedicinesPage);
+  els.showArchivedToggle.addEventListener('click', () => {
+    state.showArchived = !state.showArchived;
+    els.showArchivedToggle.textContent = state.showArchived ? 'إخفاء المؤرشفة' : 'عرض المؤرشفة';
+    loadMedicines();
+  });
 
   (async function init() {
     try {
