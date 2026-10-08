@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>لوحة التحكم | مخزون طبيبي</title>
-  <link rel="icon" href="/public/assets/images/tabibi-stock.webp" />
-  <link rel="stylesheet" href="/public/css/style.css" />
+  <link rel="icon" href="/assets/images/tabibi-stock.webp" />
+  <link rel="stylesheet" href="/css/style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
   <script>
     (function () {
@@ -30,7 +30,6 @@
       <a href="#" data-view="dashboard" class="nav-link active">لوحة التحكم</a>
       <a href="#" data-view="medicines" class="nav-link">العلاجات</a>
       <a href="#" data-view="history" class="nav-link">سجل الحركات</a>
-      <a href="#" data-view="settings" class="nav-link">إعدادات</a>
     </nav>
   </aside>
 
@@ -64,6 +63,43 @@
             </tr>
           </thead>
           <tbody id="medicinesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="view-medicines" class="view hidden">
+      <h2>العلاجات</h2>
+
+      <div class="filters">
+        <input type="text" id="searchMedicines" placeholder="ابحث باسم العلاج..." />
+        <select id="filterPerson">
+          <option value="">كل الأشخاص</option>
+        </select>
+        <select id="filterStatus">
+          <option value="">كل الحالات</option>
+          <option value="available">متوفر</option>
+          <option value="low">مخزون قليل</option>
+          <option value="out">خلص</option>
+          <option value="unregistered">لم يتم تسجيل المخزون</option>
+        </select>
+        <button id="addMedicineBtn2" class="btn primary">إضافة علاج</button>
+        <button id="showArchivedToggle" class="btn">عرض المؤرشفة</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>اسم العلاج</th>
+              <th>الشخص</th>
+              <th>عدد الشرايط</th>
+              <th>شرايط/علبة</th>
+              <th>حد التنبيه</th>
+              <th>الحالة</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="medicinesBody2"></tbody>
         </table>
       </div>
     </section>
@@ -104,6 +140,6 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/public/js/dashboard.js"></script>
+  <script src="/js/dashboard.js"></script>
 </body>
 </html>
