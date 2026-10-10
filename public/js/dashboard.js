@@ -74,22 +74,20 @@
     }[c]));
   }
 
-  // عرض: علبة/شريط/قرص
-  function formatStock(m) {
-    if (m.quantityPills === null || m.quantityPills === undefined) return '—';
-    const unit = m.unit === 'sachet' ? 'كيس' : 'قرص';
-    return `
-      <div class="stock-cell">
-        <span class="stock-num">${m.boxes}</span><span class="stock-lbl">علبة</span>
-        <span class="stock-num">${m.strips}</span><span class="stock-lbl">شريط</span>
-        <span class="stock-num">${m.pills}</span><span class="stock-lbl">${unit}</span>
-      </div>
-    `;
+  // عرض: 3 أعمدة (علبة / شريط / قرص)
+  function unitLabel(m) { return m.unit === 'sachet' ? 'كيس' : 'قرص'; }
+
+  function formatStockCells(m) {
+    const unit = unitLabel(m);
+    return {
+      boxes: m.boxes,
+      strips: m.strips,
+      pills: `<span class="stock-num">${m.pills}</span> <span class="stock-lbl">${unit}</span>`
+    };
   }
 
   function formatStockShort(m) {
-    if (m.quantityPills === null || m.quantityPills === undefined) return '—';
-    const unit = m.unit === 'sachet' ? 'كيس' : 'قرص';
+    const unit = unitLabel(m);
     return `${m.boxes} ع / ${m.strips} ش / ${m.pills} ${unit}`;
   }
 
@@ -123,22 +121,27 @@
   function renderMedicinesTable() {
     const items = state.medicines.filter((m) => !m.archived);
     if (!items.length) {
-      els.medicinesBody.innerHTML = '<tr><td colspan="5" class="empty">لا توجد علاجات</td></tr>';
+      els.medicinesBody.innerHTML = '<tr><td colspan="7" class="empty">لا توجد علاجات</td></tr>';
       return;
     }
-    els.medicinesBody.innerHTML = items.map((m) => `
-      <tr>
-        <td>${escapeHtml(m.name)}</td>
-        <td>${escapeHtml(m.person)}</td>
-        <td>${formatStock(m)}</td>
-        <td><span class="${statusClass(m.status)}">${escapeHtml(m.statusLabel)}</span></td>
-        <td class="row-actions">
-          <button class="btn small" data-action="use" data-id="${m.id}">استخدام</button>
-          <button class="btn small primary" data-action="purchase" data-id="${m.id}">شراء</button>
-          <button class="btn small ghost" data-action="details" data-id="${m.id}">تفاصيل</button>
-        </td>
-      </tr>
-    `).join('');
+    els.medicinesBody.innerHTML = items.map((m) => {
+      const stock = formatStockCells(m);
+      return `
+        <tr>
+          <td>${escapeHtml(m.name)}</td>
+          <td>${escapeHtml(m.person)}</td>
+          <td>${stock.boxes}</td>
+          <td>${stock.strips}</td>
+          <td>${stock.pills}</td>
+          <td><span class="${statusClass(m.status)}">${escapeHtml(m.statusLabel)}</span></td>
+          <td class="row-actions">
+            <button class="btn small" data-action="use" data-id="${m.id}">استخدام</button>
+            <button class="btn small primary" data-action="purchase" data-id="${m.id}">شراء</button>
+            <button class="btn small ghost" data-action="details" data-id="${m.id}">تفاصيل</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
 
     els.medicinesBody.querySelectorAll('button[data-action]').forEach((btn) => {
       btn.addEventListener('click', () => handleRowAction(btn.dataset.action, btn.dataset.id));
@@ -169,16 +172,19 @@
   function renderMedicinesPage() {
     const items = getFilteredMedicines();
     if (!items.length) {
-      els.medicinesBody2.innerHTML = '<tr><td colspan="7" class="empty">لا توجد نتائج</td></tr>';
+      els.medicinesBody2.innerHTML = '<tr><td colspan="9" class="empty">لا توجد نتائج</td></tr>';
       return;
     }
     els.medicinesBody2.innerHTML = items.map((m) => {
       const archivedTag = m.archived ? ' <span class="badge unregistered">مؤرشف</span>' : '';
+      const stock = formatStockCells(m);
       return `
         <tr>
           <td>${escapeHtml(m.name)}${archivedTag}</td>
           <td>${escapeHtml(m.person)}</td>
-          <td>${formatStockShort(m)}</td>
+          <td>${stock.boxes}</td>
+          <td>${stock.strips}</td>
+          <td>${stock.pills}</td>
           <td>${m.pillsPerStrip}</td>
           <td>${m.stripsPerBox}</td>
           <td><span class="${statusClass(m.status)}">${escapeHtml(m.statusLabel)}</span></td>
@@ -239,7 +245,7 @@
     };
   }
 
-  // ====== استخدام أقراص ======
+  // ====== استخدام (مع أزرار سريعة) ======
   function usePills(med) {
     if (med.quantityPills === null) {
       toast('لم يتم تسجيل المخزون لهذا العلاج', 'error');
@@ -249,20 +255,24 @@
       toast('العلاج خلص، سجّل عملية شراء أولاً', 'error');
       return;
     }
-    const unit = med.unit === 'sachet' ? 'كيس' : 'قرص';
+    const unit = unitLabel(med);
     const pps = med.pillsPerStrip;
+    const boxSize = pps * med.stripsPerBox;
 
     openModal(`
       <h3>استخدام من: ${escapeHtml(med.name)}</h3>
-      <p class="muted">المتاح حالياً: <b>${med.boxes}</b> علبة + <b>${med.strips}</b> شريط + <b>${med.pills}</b> ${unit} (${med.quantityPills} ${unit} إجمالاً)</p>
+      <p class="muted">
+        المتاح حالياً: <b>${med.boxes}</b> علبة + <b>${med.strips}</b> شريط + <b>${med.pills}</b> ${unit}
+        (الإجمالي: ${med.quantityPills} ${unit})
+      </p>
       <form id="useForm">
         <label>عدد الـ${unit} المستخدمة
           <input type="number" id="pillsUsed" min="1" max="${med.quantityPills}" value="1" required />
         </label>
         <div class="quick-btns">
           <button type="button" class="btn small" data-val="1">1 ${unit}</button>
-          <button type="button" class="btn small" data-val="${pps}">شريط كامل (${pps})</button>
-          <button type="button" class="btn small" data-val="${pps * med.stripsPerBox}">علبة كاملة (${pps * med.stripsPerBox})</button>
+          <button type="button" class="btn small" data-val="${pps}">شريط (${pps})</button>
+          <button type="button" class="btn small" data-val="${boxSize}">علبة (${boxSize})</button>
         </div>
         <label>ملاحظات (اختياري)
           <input type="text" id="useNotes" maxlength="500" />
@@ -305,14 +315,15 @@
 
   // ====== شراء ======
   function purchaseModal(med) {
-    const unit = med.unit === 'sachet' ? 'كيس' : 'قرص';
+    const unit = unitLabel(med);
+    const boxSize = med.pillsPerStrip * med.stripsPerBox;
     openModal(`
       <h3>شراء: ${escapeHtml(med.name)}</h3>
-      <p class="muted">الشريط = ${med.pillsPerStrip} ${unit} • العلبة = ${med.stripsPerBox} شريط (${med.pillsPerStrip * med.stripsPerBox} ${unit})</p>
+      <p class="muted">الشريط = ${med.pillsPerStrip} ${unit} • العلبة = ${med.stripsPerBox} شريط (${boxSize} ${unit})</p>
       <form id="purchaseForm">
         <label>نوع الشراء
           <select id="purchaseType">
-            <option value="box">علبة (${med.pillsPerStrip * med.stripsPerBox} ${unit})</option>
+            <option value="box">علبة (${boxSize} ${unit})</option>
             <option value="strip">شريط (${med.pillsPerStrip} ${unit})</option>
             <option value="pill">${unit} مفردة</option>
           </select>
@@ -363,7 +374,7 @@
   async function detailsModal(med) {
     try {
       const d = await api(`/api/medicines/${med.id}`);
-      const unit = d.unit === 'sachet' ? 'كيس' : 'قرص';
+      const unit = unitLabel(d);
       const historyRows = d.history.map((h) => `
         <tr>
           <td>${h.createdAt ? new Date(h.createdAt).toLocaleString('ar-EG') : '—'}</td>
@@ -376,9 +387,9 @@
       openModal(`
         <h3>تفاصيل: ${escapeHtml(d.name)}</h3>
         <p>الشخص: <b>${escapeHtml(d.person)}</b></p>
-        <p>الكمية الحالية: <b>${d.boxes}</b> علبة + <b>${d.strips}</b> شريط + <b>${d.pills}</b> ${unit}</p>
-        <p>الإجمالي: <b>${d.quantityPills ?? '—'}</b> ${unit}</p>
-        <p>الشريط = <b>${d.pillsPerStrip}</b> ${unit} • العلبة = <b>${d.stripsPerBox}</b> شريط</p>
+        <p>العلبة: <b>${d.boxes}</b> • الشريط: <b>${d.strips}</b> • القرص: <b>${d.pills}</b> ${unit}</p>
+        <p>الإجمالي الحقيقي: <b>${d.quantityPills ?? '—'}</b> ${unit}</p>
+        <p>أقراص/شريط: <b>${d.pillsPerStrip}</b> • شرايط/علبة: <b>${d.stripsPerBox}</b></p>
         <p>حد المخزون القليل: <b>${d.lowStockThreshold}</b></p>
 
         <h4>آخر الحركات</h4>
@@ -399,7 +410,7 @@
 
   // ====== تعديل ======
   function editModal(med) {
-    const unit = med.unit === 'sachet' ? 'كيس' : 'قرص';
+    const unit = unitLabel(med);
     openModal(`
       <h3>تعديل: ${escapeHtml(med.name)}</h3>
       <form id="editForm">
@@ -407,7 +418,7 @@
         <label>الشخص <input type="text" id="editPerson" value="${escapeHtml(med.person)}" required /></label>
         <label>عدد الـ${unit} في الشريط <input type="number" id="editPps" min="1" value="${med.pillsPerStrip}" required /></label>
         <label>عدد الشرايط في العلبة <input type="number" id="editSpb" min="1" value="${med.stripsPerBox}" required /></label>
-        <label>حد المخزون القليل (بالشرايط) <input type="number" id="editLst" min="0" value="${med.lowStockThreshold}" required /></label>
+        <label>حد المخزون القليل <input type="number" id="editLst" min="0" value="${med.lowStockThreshold}" required /></label>
         <label>ملاحظات <input type="text" id="editNotes" maxlength="500" value="${escapeHtml(med.notes || '')}" /></label>
         <div class="modal-actions">
           <button type="button" class="btn" id="cancelBtn">إلغاء</button>
@@ -437,7 +448,7 @@
     };
   }
 
-  // ====== إضافة علاج ======
+  // ====== إضافة ======
   function addMedicineModal() {
     openModal(`
       <h3>إضافة علاج جديد</h3>
