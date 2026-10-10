@@ -29,7 +29,6 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
-
 const COLL_MEDS = 'medicines';
 const COLL_HISTORY = 'history';
 
@@ -53,7 +52,10 @@ const COOKIE_NAME = 'tabibi_token';
 const isProd = process.env.NODE_ENV === 'production';
 
 if (!JWT_SECRET) { console.error('[FATAL] JWT_SECRET is not set.'); process.exit(1); }
-if (!ADMIN_USERNAME || !ADMIN_PASSWORD_HASH) { console.error('[FATAL] ADMIN_USERNAME / ADMIN_PASSWORD_HASH are not set.'); process.exit(1); }
+if (!ADMIN_USERNAME || !ADMIN_PASSWORD_HASH) {
+  console.error('[FATAL] ADMIN_USERNAME / ADMIN_PASSWORD_HASH are not set.');
+  process.exit(1);
+}
 
 function signToken(username) {
   return jwt.sign({ sub: username, role: 'admin' }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
@@ -88,25 +90,27 @@ function isValidInt(v, { min = 0, max = 100000 } = {}) {
 }
 
 // ====== حسابات العرض ======
+// العرض المطلوب (الخيار 3):
+//   علبة = عدد العلب الكاملة
+//   شريط = إجمالي الشرايط الكاملة
+//   قرص = إجمالي الأقراص
 function computeDisplay(quantityPills, pillsPerStrip, stripsPerBox) {
   if (quantityPills === null || quantityPills === undefined) {
-    return { boxes: null, strips: null, pills: null };
+    return { boxes: 0, strips: 0, pills: 0 };
   }
   const pps = pillsPerStrip || DEFAULT_PILLS_PER_STRIP;
   const spb = stripsPerBox || DEFAULT_STRIPS_PER_BOX;
-  const pillsPerBox = pps * spb;
 
-  const boxes = Math.floor(quantityPills / pillsPerBox);
-  const afterBoxes = quantityPills % pillsPerBox;
-  const strips = Math.floor(afterBoxes / pps);
-  const pills = afterBoxes % pps;
+  const boxes = Math.floor(quantityPills / (pps * spb));
+  const strips = Math.floor(quantityPills / pps);
+  const pills = quantityPills;
+
   return { boxes, strips, pills };
 }
 
-function computeStatus(quantityPills, pillsPerStrip, stripsPerBox, threshold) {
+function computeStatus(quantityPills, pillsPerStrip, threshold) {
   if (quantityPills === null || quantityPills === undefined) return 'unregistered';
   if (quantityPills <= 0) return 'out';
-  // نقارن بالحد بعدد الأقراص: threshold شريط * pillsPerStrip
   const thresholdPills = threshold * (pillsPerStrip || DEFAULT_PILLS_PER_STRIP);
   if (quantityPills <= thresholdPills) return 'low';
   return 'available';
@@ -129,7 +133,7 @@ function normalizeMed(doc) {
   const lst = d.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
   const qp = typeof d.quantityPills === 'number' ? d.quantityPills : null;
   const display = computeDisplay(qp, pps, spb);
-  const status = computeStatus(qp, pps, spb, lst);
+  const status = computeStatus(qp, pps, lst);
 
   return {
     id: doc.id,
@@ -372,7 +376,7 @@ function historyRef() {
   return db.collection(COLL_HISTORY).doc();
 }
 
-// ====== استخدام أقراص ======
+// ====== استخدام ======
 app.post('/api/medicines/:id/use', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -389,7 +393,7 @@ app.post('/api/medicines/:id/use', requireAuth, async (req, res) => {
       const d = snap.data();
 
       if (typeof d.quantityPills !== 'number') {
-        throw { status: 400, message: 'لم يتم تسجيل المخزون لهذا العلاج، سجّل الكمية أولاً' };
+        throw { status: 400, message: 'لم يتم تسجيل المخزون لهذا العلاج' };
       }
       if (d.quantityPills <= 0) {
         throw { status: 400, message: 'العلاج خلص، سجّل عملية شراء أولاً' };
@@ -420,12 +424,12 @@ app.post('/api/medicines/:id/use', requireAuth, async (req, res) => {
       return { before, after };
     });
 
-    // نحسب العرض بعد التعديل
     const afterSnap = await medRef.get();
+    const afterData = afterSnap.data();
     const display = computeDisplay(
       result.after,
-      afterSnap.data().pillsPerStrip,
-      afterSnap.data().stripsPerBox
+      afterData.pillsPerStrip,
+      afterData.stripsPerBox
     );
 
     res.json({ ok: true, ...result, display });
