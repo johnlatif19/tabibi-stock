@@ -34,11 +34,12 @@
   </aside>
 
   <main class="main">
+    <!-- ====== Dashboard ====== -->
     <section id="view-dashboard" class="view">
       <h2>ملخص المخزون</h2>
       <div class="cards">
         <div class="card stat"><span class="stat-num" id="statTypes">0</span><span class="stat-label">إجمالي أنواع العلاج</span></div>
-        <div class="card stat"><span class="stat-num" id="statStrips">0</span><span class="stat-label">إجمالي الشرايط المتاحة</span></div>
+        <div class="card stat"><span class="stat-num" id="statPills">0</span><span class="stat-label">إجمالي الأقراص المتاحة</span></div>
         <div class="card stat"><span class="stat-num" id="statAvailable">0</span><span class="stat-label">علاجات متوفرة</span></div>
         <div class="card stat"><span class="stat-num" id="statLow">0</span><span class="stat-label">علاجات قاربت على النفاد</span></div>
         <div class="card stat"><span class="stat-num" id="statOut">0</span><span class="stat-label">علاجات خلصت</span></div>
@@ -48,7 +49,6 @@
       <div class="actions-bar">
         <button id="purchaseBtn" class="btn primary">شراء علاج</button>
         <button id="addMedicineBtn" class="btn">إضافة علاج</button>
-        <button id="initSeedBtn" class="btn ghost">تهيئة القائمة الافتراضية</button>
       </div>
 
       <div class="table-wrap">
@@ -57,7 +57,7 @@
             <tr>
               <th>اسم العلاج</th>
               <th>الشخص</th>
-              <th>عدد الشرايط المتبقية</th>
+              <th>المخزون (علبة / شريط / قرص)</th>
               <th>حالة المخزون</th>
               <th>إجراءات</th>
             </tr>
@@ -67,6 +67,7 @@
       </div>
     </section>
 
+    <!-- ====== Medicines ====== -->
     <section id="view-medicines" class="view hidden">
       <h2>العلاجات</h2>
 
@@ -92,7 +93,8 @@
             <tr>
               <th>اسم العلاج</th>
               <th>الشخص</th>
-              <th>عدد الشرايط</th>
+              <th>المخزون</th>
+              <th>أقراص/شريط</th>
               <th>شرايط/علبة</th>
               <th>حد التنبيه</th>
               <th>الحالة</th>
@@ -104,6 +106,7 @@
       </div>
     </section>
 
+    <!-- ====== History ====== -->
     <section id="view-history" class="view hidden">
       <h2>سجل الحركات</h2>
       <div class="filters">
