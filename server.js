@@ -32,18 +32,10 @@ const db = admin.firestore();
 
 const COLL_MEDS = 'medicines';
 const COLL_HISTORY = 'history';
-const COLL_META = 'meta';
-const META_INIT_DOC = 'init';
 
+const DEFAULT_PILLS_PER_STRIP = 10;
 const DEFAULT_STRIPS_PER_BOX = 3;
-const ATOR_STRIPS_PER_BOX = 1;
 const DEFAULT_LOW_STOCK_THRESHOLD = 2;
-
-const SEED_DATA = [
-  { person: 'علاج چون', medicines: ['دلتاڤيت', 'أزاثيوبرين', 'فوليك أسيد', 'براڤوتين'] },
-  { person: 'علاج أم مينا', medicines: ['دافلون', 'كالسيترون', 'ليميتلس', 'أوسوفرتين D3', 'ميلوكام'] },
-  { person: 'علاج لطيف', medicines: ['أزابريل', 'بانتوبي', 'كونكور', 'جوسبرين', 'أتور', 'بلاڤيكس'] }
-];
 
 const app = express();
 app.disable('x-powered-by');
@@ -60,68 +52,63 @@ const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 const COOKIE_NAME = 'tabibi_token';
 const isProd = process.env.NODE_ENV === 'production';
 
-if (!JWT_SECRET) {
-  console.error('[FATAL] JWT_SECRET is not set.');
-  process.exit(1);
-}
-if (!ADMIN_USERNAME || !ADMIN_PASSWORD_HASH) {
-  console.error('[FATAL] ADMIN_USERNAME / ADMIN_PASSWORD_HASH are not set.');
-  process.exit(1);
-}
+if (!JWT_SECRET) { console.error('[FATAL] JWT_SECRET is not set.'); process.exit(1); }
+if (!ADMIN_USERNAME || !ADMIN_PASSWORD_HASH) { console.error('[FATAL] ADMIN_USERNAME / ADMIN_PASSWORD_HASH are not set.'); process.exit(1); }
 
 function signToken(username) {
   return jwt.sign({ sub: username, role: 'admin' }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
-
 function setAuthCookie(res, token) {
   res.cookie(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    maxAge: 8 * 60 * 60 * 1000,
-    path: '/'
+    httpOnly: true, secure: isProd, sameSite: 'lax',
+    maxAge: 8 * 60 * 60 * 1000, path: '/'
   });
 }
-
 function clearAuthCookie(res) {
   res.clearCookie(COOKIE_NAME, { path: '/' });
 }
-
 function hasValidSession(req) {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) return false;
-  try {
-    jwt.verify(token, JWT_SECRET);
-    return true;
-  } catch {
-    return false;
-  }
+  try { jwt.verify(token, JWT_SECRET); return true; } catch { return false; }
 }
-
 function requireAuth(req, res, next) {
   const bearer = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null;
   const token = req.cookies?.[COOKIE_NAME] || bearer;
   if (!token) return res.status(401).json({ error: 'غير مصرح' });
-  try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch {
-    return res.status(401).json({ error: 'جلسة غير صالحة' });
-  }
+  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
+  catch { return res.status(401).json({ error: 'جلسة غير صالحة' }); }
 }
 
 function isValidString(v, max = 200) {
   return typeof v === 'string' && v.trim().length > 0 && v.length <= max;
 }
-
 function isValidInt(v, { min = 0, max = 100000 } = {}) {
   return Number.isInteger(v) && v >= min && v <= max;
 }
 
-function computeStatus(quantity, threshold) {
-  if (quantity === null || quantity === undefined) return 'unregistered';
-  if (quantity <= 0) return 'out';
-  if (quantity <= threshold) return 'low';
+// ====== حسابات العرض ======
+function computeDisplay(quantityPills, pillsPerStrip, stripsPerBox) {
+  if (quantityPills === null || quantityPills === undefined) {
+    return { boxes: null, strips: null, pills: null };
+  }
+  const pps = pillsPerStrip || DEFAULT_PILLS_PER_STRIP;
+  const spb = stripsPerBox || DEFAULT_STRIPS_PER_BOX;
+  const pillsPerBox = pps * spb;
+
+  const boxes = Math.floor(quantityPills / pillsPerBox);
+  const afterBoxes = quantityPills % pillsPerBox;
+  const strips = Math.floor(afterBoxes / pps);
+  const pills = afterBoxes % pps;
+  return { boxes, strips, pills };
+}
+
+function computeStatus(quantityPills, pillsPerStrip, stripsPerBox, threshold) {
+  if (quantityPills === null || quantityPills === undefined) return 'unregistered';
+  if (quantityPills <= 0) return 'out';
+  // نقارن بالحد بعدد الأقراص: threshold شريط * pillsPerStrip
+  const thresholdPills = threshold * (pillsPerStrip || DEFAULT_PILLS_PER_STRIP);
+  if (quantityPills <= thresholdPills) return 'low';
   return 'available';
 }
 
@@ -135,41 +122,42 @@ function statusLabelAr(status) {
   }
 }
 
+function normalizeMed(doc) {
+  const d = doc.data();
+  const pps = d.pillsPerStrip ?? DEFAULT_PILLS_PER_STRIP;
+  const spb = d.stripsPerBox ?? DEFAULT_STRIPS_PER_BOX;
+  const lst = d.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
+  const qp = typeof d.quantityPills === 'number' ? d.quantityPills : null;
+  const display = computeDisplay(qp, pps, spb);
+  const status = computeStatus(qp, pps, spb, lst);
+
+  return {
+    id: doc.id,
+    name: d.name,
+    person: d.person,
+    unit: d.unit || 'pill',
+    quantityPills: qp,
+    pillsPerStrip: pps,
+    stripsPerBox: spb,
+    lowStockThreshold: lst,
+    notes: d.notes || '',
+    archived: !!d.archived,
+    status,
+    statusLabel: statusLabelAr(status),
+    boxes: display.boxes,
+    strips: display.strips,
+    pills: display.pills,
+    updatedAt: d.updatedAt?.toDate?.()?.toISOString() || null
+  };
+}
+
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 15 * 60 * 1000, max: 10,
+  standardHeaders: true, legacyHeaders: false,
   message: { error: 'محاولات كثيرة، حاول لاحقًا' }
 });
 
-async function ensureSeedData() {
-  const metaRef = db.collection(COLL_META).doc(META_INIT_DOC);
-  const metaSnap = await metaRef.get();
-  if (metaSnap.exists) return;
-
-  const batch = db.batch();
-  for (const group of SEED_DATA) {
-    for (const name of group.medicines) {
-      const ref = db.collection(COLL_MEDS).doc();
-      const stripsPerBox = name === 'أتور' ? ATOR_STRIPS_PER_BOX : DEFAULT_STRIPS_PER_BOX;
-      batch.set(ref, {
-        name,
-        person: group.person,
-        quantity: null,
-        stripsPerBox,
-        lowStockThreshold: DEFAULT_LOW_STOCK_THRESHOLD,
-        archived: false,
-        notes: '',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-    }
-  }
-  batch.set(metaRef, { initialized: true, initializedAt: admin.firestore.FieldValue.serverTimestamp() });
-  await batch.commit();
-}
-
+// ====== Auth ======
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body || {};
@@ -180,9 +168,8 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
     }
     const ok = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
-    if (!ok) {
-      return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
-    }
+    if (!ok) return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+
     const token = signToken(ADMIN_USERNAME);
     setAuthCookie(res, token);
     res.json({ ok: true, token, user: { username: ADMIN_USERNAME } });
@@ -201,39 +188,30 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ user: { username: req.user.sub, role: req.user.role } });
 });
 
-app.post('/api/init', requireAuth, async (req, res) => {
-  try {
-    await ensureSeedData();
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[init] error', err.message);
-    res.status(500).json({ error: 'خطأ في التهيئة' });
-  }
-});
-
+// ====== Dashboard ======
 app.get('/api/dashboard', requireAuth, async (req, res) => {
   try {
     const snap = await db.collection(COLL_MEDS).where('archived', '==', false).get();
-    let totalTypes = 0, totalStrips = 0, available = 0, low = 0, out = 0, unregistered = 0;
+    let totalTypes = 0, totalPills = 0, available = 0, low = 0, out = 0, unregistered = 0;
 
     snap.forEach((doc) => {
-      const d = doc.data();
+      const m = normalizeMed(doc);
       totalTypes += 1;
-      const status = computeStatus(d.quantity, d.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD);
-      if (status === 'available') available += 1;
-      else if (status === 'low') low += 1;
-      else if (status === 'out') out += 1;
+      if (m.status === 'available') available += 1;
+      else if (m.status === 'low') low += 1;
+      else if (m.status === 'out') out += 1;
       else unregistered += 1;
-      if (typeof d.quantity === 'number') totalStrips += d.quantity;
+      if (typeof m.quantityPills === 'number') totalPills += m.quantityPills;
     });
 
-    res.json({ totalTypes, totalStrips, available, low, out, unregistered });
+    res.json({ totalTypes, totalPills, available, low, out, unregistered });
   } catch (err) {
     console.error('[dashboard] error', err.message);
     res.status(500).json({ error: 'خطأ في الخادم' });
   }
 });
 
+// ====== Medicines ======
 app.get('/api/medicines', requireAuth, async (req, res) => {
   try {
     const includeArchived = req.query.includeArchived === 'true';
@@ -241,24 +219,7 @@ app.get('/api/medicines', requireAuth, async (req, res) => {
     if (!includeArchived) query = query.where('archived', '==', false);
     const snap = await query.get();
 
-    const items = snap.docs.map((doc) => {
-      const d = doc.data();
-      const status = computeStatus(d.quantity, d.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD);
-      return {
-        id: doc.id,
-        name: d.name,
-        person: d.person,
-        quantity: d.quantity,
-        stripsPerBox: d.stripsPerBox ?? DEFAULT_STRIPS_PER_BOX,
-        lowStockThreshold: d.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD,
-        notes: d.notes || '',
-        archived: !!d.archived,
-        status,
-        statusLabel: statusLabelAr(status),
-        updatedAt: d.updatedAt?.toDate?.()?.toISOString() || null
-      };
-    });
-
+    const items = snap.docs.map(normalizeMed);
     items.sort((a, b) => (a.person + a.name).localeCompare(b.person + b.name, 'ar'));
     res.json({ items });
   } catch (err) {
@@ -269,29 +230,34 @@ app.get('/api/medicines', requireAuth, async (req, res) => {
 
 app.post('/api/medicines', requireAuth, async (req, res) => {
   try {
-    const { name, person, quantity, stripsPerBox, lowStockThreshold, notes } = req.body || {};
+    const { name, person, quantityPills, pillsPerStrip, stripsPerBox, lowStockThreshold, notes, unit } = req.body || {};
     if (!isValidString(name, 120)) return res.status(400).json({ error: 'اسم العلاج مطلوب' });
     if (!isValidString(person, 120)) return res.status(400).json({ error: 'الشخص مطلوب' });
 
+    const pps = pillsPerStrip === undefined ? DEFAULT_PILLS_PER_STRIP : pillsPerStrip;
     const spb = stripsPerBox === undefined ? DEFAULT_STRIPS_PER_BOX : stripsPerBox;
     const lst = lowStockThreshold === undefined ? DEFAULT_LOW_STOCK_THRESHOLD : lowStockThreshold;
+
+    if (!isValidInt(pps, { min: 1, max: 1000 })) return res.status(400).json({ error: 'عدد الأقراص بالشريط غير صحيح' });
     if (!isValidInt(spb, { min: 1, max: 1000 })) return res.status(400).json({ error: 'عدد الشرايط بالعلبة غير صحيح' });
     if (!isValidInt(lst, { min: 0, max: 1000 })) return res.status(400).json({ error: 'حد المخزون القليل غير صحيح' });
 
-    let q = null;
-    if (quantity !== undefined && quantity !== null && quantity !== '') {
-      if (!isValidInt(quantity, { min: 0, max: 100000 })) {
+    let qp = null;
+    if (quantityPills !== undefined && quantityPills !== null && quantityPills !== '') {
+      if (!isValidInt(quantityPills, { min: 0, max: 100000 })) {
         return res.status(400).json({ error: 'الكمية غير صحيحة' });
       }
-      q = quantity;
+      qp = quantityPills;
     }
 
     const ref = await db.collection(COLL_MEDS).add({
       name: name.trim(),
       person: person.trim(),
-      quantity: q,
+      quantityPills: qp,
+      pillsPerStrip: pps,
       stripsPerBox: spb,
       lowStockThreshold: lst,
+      unit: unit === 'sachet' ? 'sachet' : 'pill',
       notes: typeof notes === 'string' ? notes.slice(0, 500) : '',
       archived: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -312,7 +278,7 @@ app.put('/api/medicines/:id', requireAuth, async (req, res) => {
     if (!snap.exists) return res.status(404).json({ error: 'العلاج غير موجود' });
 
     const updates = {};
-    const { name, person, stripsPerBox, lowStockThreshold, notes } = req.body || {};
+    const { name, person, pillsPerStrip, stripsPerBox, lowStockThreshold, notes, unit } = req.body || {};
 
     if (name !== undefined) {
       if (!isValidString(name, 120)) return res.status(400).json({ error: 'اسم غير صحيح' });
@@ -321,6 +287,10 @@ app.put('/api/medicines/:id', requireAuth, async (req, res) => {
     if (person !== undefined) {
       if (!isValidString(person, 120)) return res.status(400).json({ error: 'شخص غير صحيح' });
       updates.person = person.trim();
+    }
+    if (pillsPerStrip !== undefined) {
+      if (!isValidInt(pillsPerStrip, { min: 1, max: 1000 })) return res.status(400).json({ error: 'عدد الأقراص بالشريط غير صحيح' });
+      updates.pillsPerStrip = pillsPerStrip;
     }
     if (stripsPerBox !== undefined) {
       if (!isValidInt(stripsPerBox, { min: 1, max: 1000 })) return res.status(400).json({ error: 'عدد الشرايط بالعلبة غير صحيح' });
@@ -333,10 +303,11 @@ app.put('/api/medicines/:id', requireAuth, async (req, res) => {
     if (notes !== undefined) {
       updates.notes = typeof notes === 'string' ? notes.slice(0, 500) : '';
     }
-
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: 'لا توجد تغييرات' });
+    if (unit !== undefined) {
+      updates.unit = unit === 'sachet' ? 'sachet' : 'pill';
     }
+
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'لا توجد تغييرات' });
     updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
     await ref.update(updates);
     res.json({ ok: true });
@@ -366,13 +337,8 @@ app.get('/api/medicines/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
     const snap = await db.collection(COLL_MEDS).doc(id).get();
     if (!snap.exists) return res.status(404).json({ error: 'العلاج غير موجود' });
-    const d = snap.data();
 
-    const quantity = typeof d.quantity === 'number' ? d.quantity : null;
-    const spb = d.stripsPerBox ?? DEFAULT_STRIPS_PER_BOX;
-    const completeBoxes = quantity === null ? null : Math.floor(quantity / spb);
-    const leftoverStrips = quantity === null ? null : quantity % spb;
-    const status = computeStatus(quantity, d.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD);
+    const med = normalizeMed(snap);
 
     const historySnap = await db.collection(COLL_HISTORY)
       .where('medicineId', '==', id)
@@ -389,26 +355,13 @@ app.get('/api/medicines/:id', requireAuth, async (req, res) => {
         quantityBefore: hd.quantityBefore,
         quantityChange: hd.quantityChange,
         quantityAfter: hd.quantityAfter,
+        unit: hd.unit || 'pill',
         notes: hd.notes || '',
         createdAt: hd.createdAt?.toDate?.()?.toISOString() || null
       };
     });
 
-    res.json({
-      id,
-      name: d.name,
-      person: d.person,
-      quantity,
-      stripsPerBox: spb,
-      lowStockThreshold: d.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD,
-      notes: d.notes || '',
-      archived: !!d.archived,
-      status,
-      statusLabel: statusLabelAr(status),
-      completeBoxes,
-      leftoverStrips,
-      history
-    });
+    res.json({ ...med, history });
   } catch (err) {
     console.error('[medicines:get] error', err.message);
     res.status(500).json({ error: 'خطأ في الخادم' });
@@ -419,12 +372,13 @@ function historyRef() {
   return db.collection(COLL_HISTORY).doc();
 }
 
+// ====== استخدام أقراص ======
 app.post('/api/medicines/:id/use', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const count = req.body?.count === undefined ? 1 : req.body.count;
-    if (!isValidInt(count, { min: 1, max: 1000 })) {
-      return res.status(400).json({ error: 'عدد الشرايط غير صحيح' });
+    const pillsUsed = req.body?.pills === undefined ? 1 : req.body.pills;
+    if (!isValidInt(pillsUsed, { min: 1, max: 10000 })) {
+      return res.status(400).json({ error: 'عدد الأقراص غير صحيح' });
     }
     const notes = typeof req.body?.notes === 'string' ? req.body.notes.slice(0, 500) : '';
     const medRef = db.collection(COLL_MEDS).doc(id);
@@ -434,29 +388,30 @@ app.post('/api/medicines/:id/use', requireAuth, async (req, res) => {
       if (!snap.exists) throw { status: 404, message: 'العلاج غير موجود' };
       const d = snap.data();
 
-      if (typeof d.quantity !== 'number') {
+      if (typeof d.quantityPills !== 'number') {
         throw { status: 400, message: 'لم يتم تسجيل المخزون لهذا العلاج، سجّل الكمية أولاً' };
       }
-      if (d.quantity <= 0) {
+      if (d.quantityPills <= 0) {
         throw { status: 400, message: 'العلاج خلص، سجّل عملية شراء أولاً' };
       }
-      if (count > d.quantity) {
-        throw { status: 400, message: 'الكمية المطلوبة أكبر من المتاح' };
+      if (pillsUsed > d.quantityPills) {
+        throw { status: 400, message: `الكمية المطلوبة أكبر من المتاح (${d.quantityPills})` };
       }
 
-      const before = d.quantity;
-      const after = before - count;
+      const before = d.quantityPills;
+      const after = before - pillsUsed;
       const now = admin.firestore.FieldValue.serverTimestamp();
 
-      tx.update(medRef, { quantity: after, updatedAt: now });
+      tx.update(medRef, { quantityPills: after, updatedAt: now });
       tx.set(historyRef(), {
         medicineId: id,
         medicineName: d.name,
         person: d.person,
+        unit: d.unit || 'pill',
         type: 'use',
         purchaseType: null,
         quantityBefore: before,
-        quantityChange: -count,
+        quantityChange: -pillsUsed,
         quantityAfter: after,
         notes,
         createdAt: now
@@ -465,7 +420,15 @@ app.post('/api/medicines/:id/use', requireAuth, async (req, res) => {
       return { before, after };
     });
 
-    res.json({ ok: true, ...result });
+    // نحسب العرض بعد التعديل
+    const afterSnap = await medRef.get();
+    const display = computeDisplay(
+      result.after,
+      afterSnap.data().pillsPerStrip,
+      afterSnap.data().stripsPerBox
+    );
+
+    res.json({ ok: true, ...result, display });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('[use] error', err.message);
@@ -473,12 +436,13 @@ app.post('/api/medicines/:id/use', requireAuth, async (req, res) => {
   }
 });
 
+// ====== شراء ======
 app.post('/api/medicines/:id/purchase', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { purchaseType, quantity, price, notes, purchaseDate } = req.body || {};
 
-    if (purchaseType !== 'box' && purchaseType !== 'strips') {
+    if (!['box', 'strip', 'pill'].includes(purchaseType)) {
       return res.status(400).json({ error: 'نوع الشراء غير صحيح' });
     }
     if (!isValidInt(quantity, { min: 1, max: 100000 })) {
@@ -495,22 +459,28 @@ app.post('/api/medicines/:id/purchase', requireAuth, async (req, res) => {
       const snap = await tx.get(medRef);
       if (!snap.exists) throw { status: 404, message: 'العلاج غير موجود' };
       const d = snap.data();
+      const pps = d.pillsPerStrip ?? DEFAULT_PILLS_PER_STRIP;
       const spb = d.stripsPerBox ?? DEFAULT_STRIPS_PER_BOX;
 
-      const stripsToAdd = purchaseType === 'box' ? quantity * spb : quantity;
-      const before = typeof d.quantity === 'number' ? d.quantity : 0;
-      const after = before + stripsToAdd;
+      let pillsToAdd;
+      if (purchaseType === 'box') pillsToAdd = quantity * spb * pps;
+      else if (purchaseType === 'strip') pillsToAdd = quantity * pps;
+      else pillsToAdd = quantity;
+
+      const before = typeof d.quantityPills === 'number' ? d.quantityPills : 0;
+      const after = before + pillsToAdd;
       const now = admin.firestore.FieldValue.serverTimestamp();
 
-      tx.update(medRef, { quantity: after, updatedAt: now });
+      tx.update(medRef, { quantityPills: after, updatedAt: now });
       tx.set(historyRef(), {
         medicineId: id,
         medicineName: d.name,
         person: d.person,
+        unit: d.unit || 'pill',
         type: 'purchase',
         purchaseType,
         quantityBefore: before,
-        quantityChange: stripsToAdd,
+        quantityChange: pillsToAdd,
         quantityAfter: after,
         price: typeof price === 'number' ? price : null,
         purchaseDate: safeDate,
@@ -518,7 +488,7 @@ app.post('/api/medicines/:id/purchase', requireAuth, async (req, res) => {
         createdAt: now
       });
 
-      return { before, after, stripsAdded: stripsToAdd };
+      return { before, after, pillsAdded: pillsToAdd };
     });
 
     res.json({ ok: true, ...result });
@@ -529,6 +499,7 @@ app.post('/api/medicines/:id/purchase', requireAuth, async (req, res) => {
   }
 });
 
+// ====== تعديل يدوي ======
 app.post('/api/medicines/:id/adjust', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -543,16 +514,17 @@ app.post('/api/medicines/:id/adjust', requireAuth, async (req, res) => {
       const snap = await tx.get(medRef);
       if (!snap.exists) throw { status: 404, message: 'العلاج غير موجود' };
       const d = snap.data();
-      const before = typeof d.quantity === 'number' ? d.quantity : 0;
+      const before = typeof d.quantityPills === 'number' ? d.quantityPills : 0;
       const after = newQuantity;
       const change = after - before;
       const now = admin.firestore.FieldValue.serverTimestamp();
 
-      tx.update(medRef, { quantity: after, updatedAt: now });
+      tx.update(medRef, { quantityPills: after, updatedAt: now });
       tx.set(historyRef(), {
         medicineId: id,
         medicineName: d.name,
         person: d.person,
+        unit: d.unit || 'pill',
         type: 'adjust',
         purchaseType: null,
         quantityBefore: before,
@@ -573,6 +545,7 @@ app.post('/api/medicines/:id/adjust', requireAuth, async (req, res) => {
   }
 });
 
+// ====== History ======
 app.get('/api/history', requireAuth, async (req, res) => {
   try {
     const { medicineId, person, type, from, to, limit } = req.query;
@@ -603,6 +576,7 @@ app.get('/api/history', requireAuth, async (req, res) => {
         medicineId: d.medicineId,
         medicineName: d.medicineName,
         person: d.person,
+        unit: d.unit || 'pill',
         type: d.type,
         purchaseType: d.purchaseType || null,
         quantityBefore: d.quantityBefore,
@@ -634,6 +608,7 @@ app.get('/api/people', requireAuth, async (req, res) => {
   }
 });
 
+// ====== Static & routes ======
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 app.get(['/dashboard.html', '/login.html'], (req, res) => {
