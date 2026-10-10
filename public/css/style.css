@@ -24,6 +24,7 @@ body {
 a { color: var(--teal-dark); text-decoration: none; }
 .hidden { display: none !important; }
 
+/* ====== Login ====== */
 .login-body {
   display: flex; align-items: center; justify-content: center;
   min-height: 100vh; padding: 1rem;
@@ -45,6 +46,7 @@ form input, form select {
 }
 form input:focus, form select:focus { outline: 2px solid var(--teal); border-color: var(--teal); }
 
+/* ====== Buttons ====== */
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
   padding: .65rem 1.1rem; border-radius: 10px; border: 1px solid var(--gray);
@@ -58,10 +60,12 @@ form input:focus, form select:focus { outline: 2px solid var(--teal); border-col
 .btn.small { padding: .35rem .65rem; font-size: .85rem; }
 .btn[disabled] { opacity: .6; cursor: not-allowed; transform: none; }
 
+/* ====== Messages ====== */
 .message { margin-top: 1rem; text-align: center; font-size: .95rem; min-height: 1.2em; }
 .message.error { color: var(--danger); }
 .message.success { color: var(--ok); }
 
+/* ====== Dashboard layout ====== */
 .dashboard-body { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: 64px 1fr; min-height: 100vh; }
 .topbar {
   grid-column: 1 / -1; display: flex; align-items: center; gap: 1rem;
@@ -89,6 +93,7 @@ form input:focus, form select:focus { outline: 2px solid var(--teal); border-col
 .view h2 { color: var(--navy); margin-bottom: 1rem; }
 .view h4 { color: var(--navy); margin: 1rem 0 .5rem; }
 
+/* ====== Cards ====== */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
 .card { background: var(--white); border-radius: 14px; padding: 1.1rem; box-shadow: var(--shadow); }
 .card.stat { display: flex; flex-direction: column; }
@@ -97,6 +102,7 @@ form input:focus, form select:focus { outline: 2px solid var(--teal); border-col
 
 .actions-bar { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
 
+/* ====== Tables ====== */
 .table-wrap { background: var(--white); border-radius: 14px; overflow: auto; box-shadow: var(--shadow); }
 .table { width: 100%; border-collapse: collapse; min-width: 640px; }
 .table th, .table td { padding: .8rem 1rem; text-align: right; border-bottom: 1px solid var(--gray); }
@@ -105,15 +111,41 @@ form input:focus, form select:focus { outline: 2px solid var(--teal); border-col
 .table .empty { text-align: center; color: var(--muted); padding: 2rem; }
 .row-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
 
+/* ====== Stock cell (علبة / شريط / قرص) ====== */
+.stock-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.stock-num {
+  font-weight: 700;
+  color: var(--teal-dark);
+  font-size: 1.05em;
+}
+.stock-lbl {
+  color: var(--muted);
+  font-size: .85em;
+  margin-inline-end: 6px;
+}
+
+/* ====== Badges ====== */
 .badge { display: inline-block; padding: .25rem .65rem; border-radius: 999px; font-size: .82rem; font-weight: 600; }
 .badge.available { background: #dff6e6; color: var(--ok); }
 .badge.low { background: #fdf1d6; color: var(--warn); }
 .badge.out { background: #fbe0dd; color: var(--danger); }
 .badge.unregistered { background: #e6ebf3; color: var(--muted); }
 
+/* ====== Filters ====== */
 .filters { display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; }
-.filters select { padding: .5rem .75rem; border-radius: 10px; border: 1px solid var(--gray); font: inherit; }
+.filters select,
+.filters input {
+  padding: .5rem .75rem; border-radius: 10px; border: 1px solid var(--gray);
+  font: inherit; background: #fbfcfe; color: var(--text);
+}
+.filters input { min-width: 200px; }
 
+/* ====== Modal ====== */
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(13, 43, 78, .5);
   display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 50;
@@ -125,9 +157,29 @@ form input:focus, form select:focus { outline: 2px solid var(--teal); border-col
 .modal h3 { color: var(--navy); margin-bottom: .75rem; }
 .modal p { margin-bottom: .5rem; }
 .modal .hint { color: var(--muted); font-size: .85rem; }
+.modal .muted { color: var(--muted); font-size: .92em; margin-bottom: 10px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
 .table.small th, .table.small td { padding: .45rem .6rem; font-size: .85rem; }
 
+/* ====== Quick buttons (أزرار سريعة للاستخدام) ====== */
+.quick-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 6px 0 12px;
+}
+.quick-btns .btn.small {
+  background: #eefaf9;
+  border-color: var(--teal);
+  color: var(--teal-dark);
+  font-weight: 600;
+}
+.quick-btns .btn.small:hover {
+  background: var(--teal);
+  color: #fff;
+}
+
+/* ====== Toast ====== */
 .toast {
   position: fixed; bottom: 1.25rem; inset-inline-start: 1.25rem;
   background: var(--navy); color: white; padding: .8rem 1.2rem; border-radius: 10px;
@@ -136,6 +188,7 @@ form input:focus, form select:focus { outline: 2px solid var(--teal); border-col
 .toast.success { background: var(--ok); }
 .toast.error { background: var(--danger); }
 
+/* ====== Responsive ====== */
 @media (max-width: 860px) {
   .dashboard-body { grid-template-columns: 1fr; }
   .sidebar {
